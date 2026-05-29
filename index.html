@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>消消乐</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;font-family:"Microsoft YaHei","PingFang SC",sans-serif;
+  overflow:hidden;user-select:none;-webkit-user-select:none;
+}
+h1{
+  color:#fff;font-size:clamp(20px,4vw,32px);margin-bottom:6px;
+  text-shadow:0 0 20px rgba(255,200,50,.5);letter-spacing:4px;
+}
+.score-board{
+  display:flex;gap:24px;margin-bottom:12px;color:#fff;font-size:15px;
+}
+.score-board span{color:#ffd700;font-weight:700;font-size:20px}
+#game-container{
+  position:relative;background:rgba(255,255,255,.06);
+  border-radius:16px;padding:7px;
+  box-shadow:0 0 40px rgba(100,150,255,.2),inset 0 0 20px rgba(0,0,0,.3);
+  border:1px solid rgba(255,255,255,.1);
+}
+canvas{display:block;border-radius:10px;touch-action:manipulation}
+.btn{
+  margin-top:14px;padding:10px 32px;font-size:15px;border:none;border-radius:25px;
+  cursor:pointer;font-weight:700;letter-spacing:1px;transition:all .2s;
+  background:linear-gradient(135deg,#ff6b6b,#ee5a24);color:#fff;
+  box-shadow:0 4px 15px rgba(238,90,36,.4);
+}
+.btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(238,90,36,.6)}
+.btn:active{transform:translateY(0)}
+.combo-text{
+  position:fixed;pointer-events:none;font-weight:900;font-size:28px;
+  color:#ffd700;text-shadow:0 0 10px rgba(255,200,0,.8);z-index:10;
+  animation:floatUp .8s ease-out forwards;
+}
+@keyframes floatUp{
+  0%{opacity:1;transform:translateY(0) scale(1)}
+  100%{opacity:0;transform:translateY(-60px) scale(1.3)}
+}
+</style>
+</head>
+<body>
+<h1>✨ 消消乐</h1>
+<div class="score-board">得分：<span id="score">0</span>&nbsp;&nbsp;连击：<span id="combo">x1</span></div>
+<div id="game-container"><canvas id="c"></canvas></div>
+<button class="btn" onclick="restart()">🔄 重新开始</button>
+
+<script>
+const ROWS=8,COLS=8,COLORS=6;
+const gems=["🔴","🟠","🟡","🟢","🔵","🟣"];
+let grid=[],score=0,combo=0,animating=false;
+let selR=-1,selC=-1;
+const canvas=document.getElementById("c");
+const ctx=canvas.getContext("2d");
+let CELL,gap;
+
+function resize(){
+  const maxW=Math.min(window.innerWidth-20,420);
+  const maxH=Math.min(window.innerHeight-260,420);
+  const size=Math.min(maxW,maxH);
+  gap=Math.floor(size*.03);
+  CELL=Math.floor((size-gap*(COLS+1))/COLS);
+  canvas.width=canvas.height=CELL*COLS+gap*(COLS+1);
+}
+resize();window.addEventListener("resize",()=>{resize();draw()});
+
+function newGrid(){
+  grid=Array.from({length:ROWS},()=>Array.from({length:COLS},()=>Math.floor(Math.random()*COLORS)));
+  while(hasMatches()){for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(isPartOfMatch(r,c))grid[r][c]=Math.floor(Math.random()*COLORS)}
+}
+
+function hasMatches(){
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(c<COLS-2&&grid[r][c]===grid[r][c+1]&&grid[r][c]===grid[r][c+2])return true;
+  for(let r=0;r<ROWS-2;r++)for(let c=0;c<COLS;c++)if(grid[r][c]===grid[r+1][c]&&grid[r][c]===grid[r+2][c])return true;
+  return false
+}
+
+function isPartOfMatch(r,c){
+  if(c<COLS-2&&grid[r][c]===grid[r][c+1]&&grid[r][c]===grid[r][c+2])return true;
+  if(c>0&&c<COLS-1&&grid[r][c-1]===grid[r][c]&&grid[r][c]===grid[r][c+1])return true;
+  if(c>1&&grid[r][c-2]===grid[r][c-1]&&grid[r][c-1]===grid[r][c])return true;
+  if(r<ROWS-2&&grid[r][c]===grid[r+1][c]&&grid[r][c]===grid[r+2][c])return true;
+  if(r>0&&r<ROWS-1&&grid[r-1][c]===grid[r][c]&&grid[r][c]===grid[r+1][c])return true;
+  if(r>1&&grid[r-2][c]===grid[r-1][c]&&grid[r-1][c]===grid[r][c])return true;
+  return false
+}
+
+function findMatches(){
+  const m=new Set();
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(isPartOfMatch(r,c))m.add(r+","+c);
+  return m
+}
+
+function draw(selR2,selC2){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const x=gap+c*(CELL+gap),y=gap+r*(CELL+gap);
+    const isSel=(r===selR2&&c===selC2)||(r===selR&&c===selC);
+    ctx.fillStyle=isSel?"rgba(255,255,255,.25)":"rgba(255,255,255,.08)";
+    ctx.beginPath();roundRect(x,y,CELL,CELL,8);ctx.fill();
+    if(isSel){ctx.strokeStyle="#ffd700";ctx.lineWidth=2.5;ctx.stroke()}
+    ctx.font=`${CELL*.55}px sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";
+    ctx.fillText(gems[grid[r][c]],x+CELL/2,y+CELL/2);
+  }
+}
+function roundRect(x,y,w,h,r){
+  ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y)
+}
+
+async function swap(r1,c1,r2,c2){
+  [grid[r1][c1],grid[r2][c2]]=[grid[r2][c2],grid[r1][c1]];
+  const m=findMatches();
+  if(m.size===0){[grid[r1][c1],grid[r2][c2]]=[grid[r2][c2],grid[r1][c1]];return false}
+  return true
+}
+
+function showCombo(x,y,txt){
+  const el=document.createElement("div");el.className="combo-text";
+  el.textContent=txt;el.style.left=x+"px";el.style.top=y+"px";
+  document.body.appendChild(el);setTimeout(()=>el.remove(),800)
+}
+
+async function processMatches(){
+  let matched;
+  do{
+    matched=findMatches();
+    if(matched.size===0)break;
+    combo++;const pts=matched.size*10*combo;
+    score+=pts;updateScore();
+    const cr=Math.floor([...matched].map(s=>parseInt(s.split(",")[0])).reduce((a,b)=>a+b,0)/matched.size);
+    const cc=Math.floor([...matched].map(s=>parseInt(s.split(",")[1])).reduce((a,b)=>a+b,0)/matched.size);
+    const rect=canvas.getBoundingClientRect();
+    showCombo(rect.left+gap+cc*(CELL+gap)+CELL/2,rect.top+gap+cr*(CELL+gap),combo>1?"🔥x"+combo:"+"+pts);
+    for(const k of matched){const[p,q]=k.split(",").map(Number);grid[p][q]=-1}
+    draw();await sleep(200);
+    for(let c=0;c<COLS;c++){
+      let wr=ROWS-1;
+      for(let r=ROWS-1;r>=0;r--)if(grid[r][c]!==-1){grid[wr][c]=grid[r][c];wr--}
+      for(let r=wr;r>=0;r--)grid[r][c]=Math.floor(Math.random()*COLORS)
+    }
+    draw();await sleep(250);
+  }while(matched.size>0);
+  if(combo>0&&findMatches().size===0)combo=0
+}
+
+function updateScore(){
+  document.getElementById("score").textContent=score;
+  document.getElementById("combo").textContent="x"+Math.max(1,combo+1)
+}
+
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
+
+canvas.addEventListener("click",async e=>{
+  if(animating)return;
+  const rect=canvas.getBoundingClientRect();
+  const x=e.clientX-rect.left,y=e.clientY-rect.top;
+  const c=Math.floor((x-gap)/(CELL+gap)),r=Math.floor((y-gap)/(CELL+gap));
+  if(r<0||r>=ROWS||c<0||c>=COLS)return;
+  if(selR===-1){selR=r;selC=c;draw();return}
+  if(r===selR&&c===selC){selR=-1;selC=-1;draw();return}
+  if(Math.abs(r-selR)+Math.abs(c-selC)!==1){selR=r;selC=c;draw();return}
+  animating=true;
+  const ok=await swap(selR,selC,r,c);
+  selR=-1;selC=-1;
+  if(ok){await processMatches()}else{draw()}
+  animating=false;
+});
+
+function restart(){score=0;combo=0;selR=-1;selC=-1;updateScore();newGrid();draw()}
+
+newGrid();draw();
+</script>
+</body>
+</html>
